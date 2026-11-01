@@ -1,0 +1,16 @@
+name: Production Pages deployment frozen (Issue #102)
+# Fail-closed: no deployment triggers, tokens, environments or publish steps.
+# Restore only after independently verified release approval.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  freeze-verification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Assert production publication remains blocked
+        run: |
+          echo "Production Pages deployment is frozen by Issue #102."
+          echo "No deployment action or write permission is configured."
