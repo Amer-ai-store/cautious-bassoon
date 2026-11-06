@@ -1,7 +1,7 @@
 # Codex cloud environment operating instructions
 
 ## Scope
-Repository: Amer-ai-store/Mohammad-Ahmed-Ghannam. These instructions apply to Codex tasks in this repository. They do not grant permissions unavailable to the agent.
+Repository: Amer-ai-store/cautious-bassoon. These instructions apply only to tasks in this repository; never treat this checkout as another project's credential destination. They do not grant permissions unavailable to the agent.
 
 ## Autonomous execution
 For each authorized task, inspect the repository and current environment first; select the least-privileged reversible solution; implement, test, and record evidence without repeated approval for routine non-destructive work. If blocked, try a safe alternative and report the precise blocker. Never claim a cloud environment, secret, deployment, or integration exists without verifying it through the corresponding service.
@@ -20,7 +20,7 @@ For each task record: requested action, source, changes, tests and outputs, comm
 
 ## Suggested non-secret variable names (examples only)
 APP_ENV=staging
-GITHUB_REPOSITORY=Amer-ai-store/Mohammad-Ahmed-Ghannam
+GITHUB_REPOSITORY=Amer-ai-store/cautious-bassoon
 JAWAFA_DB_MODE=read_only
 DEPLOYMENT_ENABLED=false
 

@@ -1,0 +1,61 @@
+name: Claude token setup safety checks
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/save-claude-token.sh'
+      - 'docs/code-review-setup.md'
+      - 'AGENTS.md'
+      - '.github/workflows/claude-token-setup-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  token-script-safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate shell syntax and target repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/save-claude-token.sh
+          grep -Fxq 'REPO="Amer-ai-store/cautious-bassoon"' scripts/save-claude-token.sh
+          if grep -Fq 'gh secret delete' scripts/save-claude-token.sh; then
+            echo "::error::Token setup must never delete existing Actions secrets."
+            exit 1
+          fi
+      - name: Reject lookalike and cross-repository remotes before credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          bindir="$(mktemp -d)"
+          trap 'rm -rf "$bindir"' EXIT
+          cat > "$bindir/git" <<'SH'
+          #!/bin/sh
+          printf '%s\n' "$FAKE_REMOTE"
+          SH
+          cat > "$bindir/claude" <<'SH'
+          #!/bin/sh
+          exit 66
+          SH
+          chmod +x "$bindir/git" "$bindir/claude"
+          for remote in \
+            'https://github.com/Amer-ai-store/Mohammad-Ahmed-Ghannam.git' \
+            'https://github.com/Amer-ai-store/cautious-bassoon-malicious.git' \
+            'https://github.com/untrusted/cautious-bassoon.git'; do
+            if FAKE_REMOTE="$remote" PATH="$bindir:$PATH" bash scripts/save-claude-token.sh > "$bindir/output" 2>&1; then
+              echo "::error::Unauthorized checkout was accepted."
+              exit 1
+            fi
+            if ! grep -q 'Wrong Codespace/repository' "$bindir/output"; then
+              echo "::error::Checkout was not rejected at the repository guard."
+              exit 1
+            fi
+          done
+          echo 'All unsafe remotes correctly rejected; no credential access was attempted.'
