@@ -1,24 +1,27 @@
 #!/usr/bin/env bash
 # Creates a Claude Code token from your Claude subscription, checks that it works, and saves it as this
 # repository's CLAUDE_CODE_OAUTH_TOKEN Actions secret, so the long token never has to be copied by hand.
-# It then removes the ANTHROPIC_API_KEY secret, which the workflows would otherwise use instead of the token.
+# It never deletes existing secrets. If an API key also exists, the operator must choose the desired credential.
 # Meant for a GitHub Codespace opened from a phone's browser; see docs/code-review-setup.md.
 # The token is never printed by this script's own status messages; Claude setup-token may echo it in the private terminal.
 # Never share terminal screenshots or logs. The transcript is deleted on exit.
 set -euo pipefail
 
-REPO="Amer-ai-store/Mohammad-Ahmed-Ghannam"
+REPO="Amer-ai-store/cautious-bassoon"
 SECRET="CLAUDE_CODE_OAUTH_TOKEN"
 
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
-# Refuse to store a credential from a checkout of the old/wrong repository.
-# Never trust a pasted or inherited GitHub repo name as a secret destination.
+# Fail closed if this checkout does not belong to the exact target repository.
+# A substring match could mistakenly accept a different repository with a similar name.
 origin="$(git remote get-url origin 2>/dev/null || true)"
-if [[ "$origin" != *"Amer-ai-store/Mohammad-Ahmed-Ghannam"* ]]; then
-  echo "Wrong Codespace/repository: open the Amer-ai-store/Mohammad-Ahmed-Ghannam project first."
-  exit 1
-fi
+case "${origin%.git}" in
+  "https://github.com/${REPO}"|"git@github.com:${REPO}"|"ssh://git@github.com/${REPO}") ;;
+  *)
+    echo "Wrong Codespace/repository: open https://github.com/${REPO} first."
+    exit 1
+    ;;
+esac
 if ! command -v gh >/dev/null 2>&1; then
   echo "GitHub CLI (gh) is required for safe secret upload."
   exit 1
@@ -96,16 +99,17 @@ if ! gh secret list -R "$REPO" >/dev/null 2>&1; then
 fi
 printf '%s' "$token" | gh secret set "$SECRET" -R "$REPO"
 
-# The workflows use ANTHROPIC_API_KEY instead of this token whenever both secrets exist, so remove the API key
-# to make the reviews run on the Claude subscription. The key itself stays valid in the Anthropic Console.
+# Keep other credentials intact. A different workflow may still need the API key.
+# This review workflow prefers the API key if both credentials exist.
 if ! names="$(gh secret list -R "$REPO" | cut -f1)"; then
-  echo "$SECRET is saved, but the secrets could not be listed to remove ANTHROPIC_API_KEY."
-  echo "Remove it by hand at https://github.com/$REPO/settings/secrets/actions"
+  echo "$SECRET was saved, but its precedence could not be verified."
+  echo "Check https://github.com/$REPO/settings/secrets/actions before starting a review."
   exit 1
 fi
 if grep -qx 'ANTHROPIC_API_KEY' <<<"$names"; then
-  gh secret delete ANTHROPIC_API_KEY -R "$REPO"
-  echo "Removed the ANTHROPIC_API_KEY secret, so the reviews now use this subscription token."
+  echo "NOTICE: ANTHROPIC_API_KEY also exists; the review workflow will continue to prefer that API key."
+  echo "No secrets were deleted. To use the subscription token, first confirm the API key is not needed elsewhere,"
+  echo "then remove ANTHROPIC_API_KEY yourself in https://github.com/$REPO/settings/secrets/actions."
 fi
 
-say "Done: $SECRET is saved and was checked against Claude."
+say "Saved: $SECRET is present in $REPO and was accepted by Claude. Verify the actual GitHub review on a new PR."
