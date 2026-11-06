@@ -16,3 +16,6 @@
 local.properties
 .env
 debug.keystore
+
+# Keep temporary Workload Identity Federation credentials out of commits.
+gha-creds-*.json
