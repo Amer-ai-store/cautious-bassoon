@@ -36,7 +36,7 @@ def download(api, file_id):
     return out.getvalue()
 def rows(data):
     return list(csv.DictReader(io.StringIO(data.decode("utf-8-sig"))))
-def reconcile(inv, manifest, files, failures):
+def reconcile(inv, manifest, files, failures, drive_file_count):
     """Require exact, unique filename coverage across all three inventories."""
     expected_names = [x["schema_name"] + "." + x["table_name"] + ".csv" for x in inv]
     manifest_names = [x["file"] for x in manifest]
@@ -46,7 +46,7 @@ def reconcile(inv, manifest, files, failures):
     return {
         "inventory_count": len(inv),
         "manifest_count": len(manifest),
-        "drive_csv_count": len(files),
+        "drive_csv_count": drive_file_count,
         "missing_from_drive": sorted(expected - actual),
         "missing_from_manifest": sorted(expected - hashes),
         "extra_in_manifest": sorted(hashes - expected),
@@ -54,7 +54,7 @@ def reconcile(inv, manifest, files, failures):
         "verified": (
             len(inv) == len(expected)
             and len(manifest) == len(hashes)
-            and len(files) == len(actual)
+            and drive_file_count == len(actual)
             and expected == hashes == actual
             and not failures
         ),
@@ -68,7 +68,8 @@ def main():
     manifest = rows(download(api, root["manifest_sha256.csv"]["id"]))
     hashes = {x["file"]:x for x in manifest}
     data_folder = root["data"]["id"]
-    files = {x["name"]:x for x in children(api, data_folder) if x["name"].lower().endswith(".csv")}
+    drive_entries = [x for x in children(api, data_folder) if x["name"].lower().endswith(".csv")]
+    files = {x["name"]: x for x in drive_entries}
     failures = []
     for name, item in files.items():
         if name not in hashes:
@@ -77,7 +78,7 @@ def main():
         blob = download(api, item["id"])
         if hashlib.sha256(blob).hexdigest().lower() != hashes[name]["sha256"].lower():
             failures.append({"file":name,"error":"sha256_mismatch"})
-    result = reconcile(inv, manifest, files, failures)
+    result = reconcile(inv, manifest, files, failures, len(drive_entries))
     # Private host output only; do not copy this report into a public repository.
     print(json.dumps(result,ensure_ascii=False))
     if not result["verified"]: sys.exit(2)
