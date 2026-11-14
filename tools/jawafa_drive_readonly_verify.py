@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Jawafa Drive inventory verifier. Run only on an authorized private host.
 Requires pip install google-api-python-client google-auth
-and GOOGLE_APPLICATION_CREDENTIALS pointing to a read-only service account JSON.
-Share the Drive folder with that service account before running.
+and Application Default Credentials (GitHub OIDC/WIF on Actions or an authorized
+read-only service-account identity on a private host).
+Share the Drive folder as Viewer with that service account before running.
 Never publish CSV contents, tokens or financial records to GitHub Pages.
 """
 import csv, hashlib, io, json, os, sys
@@ -36,6 +37,24 @@ def download(api, file_id):
     return out.getvalue()
 def rows(data):
     return list(csv.DictReader(io.StringIO(data.decode("utf-8-sig"))))
+def required_root(entries):
+    """Resolve mandatory export resources uniquely; duplicate names are ambiguous on Drive."""
+    required = ("inventory_tables.csv", "manifest_sha256.csv", "data")
+    found = {}
+    for entry in entries:
+        name = entry["name"]
+        if name not in required:
+            continue
+        if name in found:
+            raise ValueError("Duplicate required Drive export entry: " + name)
+        found[name] = entry
+    missing = sorted(set(required) - set(found))
+    if missing:
+        raise ValueError("Missing required Drive export entries: " + ", ".join(missing))
+    if found["data"].get("mimeType") != "application/vnd.google-apps.folder":
+        raise ValueError("Expected data/ to be a Drive folder")
+    return found
+
 def reconcile(inv, manifest, files, failures, drive_file_count):
     """Require exact, unique filename coverage across all three inventories."""
     expected_names = [x["schema_name"] + "." + x["table_name"] + ".csv" for x in inv]
@@ -52,7 +71,8 @@ def reconcile(inv, manifest, files, failures, drive_file_count):
         "extra_in_manifest": sorted(hashes - expected),
         "sha256_failures": failures,
         "verified": (
-            len(inv) == len(expected)
+            len(expected) > 0
+            and len(inv) == len(expected)
             and len(manifest) == len(hashes)
             and drive_file_count == len(actual)
             and expected == hashes == actual
@@ -63,7 +83,7 @@ def reconcile(inv, manifest, files, failures, drive_file_count):
 
 def main():
     api = client()
-    root = {x["name"]: x for x in children(api, FOLDER)}
+    root = required_root(children(api, FOLDER))
     inv = rows(download(api, root["inventory_tables.csv"]["id"]))
     manifest = rows(download(api, root["manifest_sha256.csv"]["id"]))
     hashes = {x["file"]:x for x in manifest}
