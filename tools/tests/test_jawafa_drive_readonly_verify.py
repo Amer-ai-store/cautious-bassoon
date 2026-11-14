@@ -56,5 +56,46 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(result["missing_from_drive"], ["public.b.csv"])
 
 
+    def test_entirely_empty_export_is_never_verified(self):
+        result = verifier.reconcile([], [], {}, [], 0)
+        self.assertFalse(result["verified"])
+        self.assertEqual(result["inventory_count"], 0)
+        self.assertEqual(result["drive_csv_count"], 0)
+
+    def test_required_root_entries_must_be_unique(self):
+        root = [
+            {"name": "inventory_tables.csv", "id": "a"},
+            {"name": "manifest_sha256.csv", "id": "b"},
+            {"name": "data", "id": "c", "mimeType": "application/vnd.google-apps.folder"},
+            {"name": "data", "id": "d", "mimeType": "application/vnd.google-apps.folder"},
+        ]
+        with self.assertRaisesRegex(ValueError, "Duplicate required"):
+            verifier.required_root(root)
+
+    def test_required_root_entries_cannot_be_missing(self):
+        with self.assertRaisesRegex(ValueError, "Missing required"):
+            verifier.required_root([])
+
+    def test_data_resource_must_be_a_folder(self):
+        root = [
+            {"name": "inventory_tables.csv", "id": "a"},
+            {"name": "manifest_sha256.csv", "id": "b"},
+            {"name": "data", "id": "c", "mimeType": "text/plain"},
+        ]
+        with self.assertRaisesRegex(ValueError, "Drive folder"):
+            verifier.required_root(root)
+
+    def test_valid_required_root_is_resolved(self):
+        root = [
+            {"name": "inventory_tables.csv", "id": "a"},
+            {"name": "manifest_sha256.csv", "id": "b"},
+            {"name": "data", "id": "c", "mimeType": "application/vnd.google-apps.folder"},
+            {"name": "unrelated.csv", "id": "other"},
+        ]
+        result = verifier.required_root(root)
+        self.assertEqual(result["data"]["id"], "c")
+        self.assertEqual(len(result), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
